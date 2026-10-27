@@ -6,7 +6,7 @@ Creates the Kubernetes cluster the voting app runs on.
 |---|---|
 | Cloud / region | AWS `eu-north-1` (Stockholm) |
 | Network | The account's **default VPC** and its default subnets (no new VPC, no NAT gateway) |
-| Cluster | EKS, Kubernetes 1.36, public API endpoint |
+| Cluster | EKS, Kubernetes 1.36, public API endpoint, standard (not extended) support |
 | Nodes | 1 managed node group, 2 × `t3.medium` (Amazon Linux 2023) |
 | Add-ons | vpc-cni, kube-proxy, coredns, eks-pod-identity-agent, aws-ebs-csi-driver |
 | Module | [`terraform-aws-modules/eks/aws`](https://registry.terraform.io/modules/terraform-aws-modules/eks/aws) v21 |

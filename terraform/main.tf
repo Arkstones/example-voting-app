@@ -47,6 +47,13 @@ module "eks" {
   name               = var.cluster_name
   kubernetes_version = var.kubernetes_version
 
+  # AWS defaults to EXTENDED support, which costs $0.60/hour instead of $0.10
+  # once a Kubernetes version gets old. STANDARD keeps the cheap price
+  # (AWS upgrades the cluster when standard support ends).
+  upgrade_policy = {
+    support_type = "STANDARD"
+  }
+
   vpc_id     = data.aws_vpc.default.id
   subnet_ids = data.aws_subnets.default.ids
 
