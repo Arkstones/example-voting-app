@@ -35,6 +35,10 @@ spec:
         # restart the pod if the secret changes
         checksum/secret: {{ include (print $.Template.BasePath "/db-secret.yaml") . | sha256sum }}
     spec:
+      # don't inject Docker-link style variables for every Service (e.g. the
+      # "db" Service would add DB_PORT=tcp://10.100.x.x:5432, which clashes
+      # with our own DB_PORT setting and crashed the worker)
+      enableServiceLinks: false
       # uid/gid 70 is the "postgres" user in the Alpine postgres image
       {{- include "uga-vote.podSecurity" (dict "uid" 70 "gid" 70) | nindent 6 }}
       containers:

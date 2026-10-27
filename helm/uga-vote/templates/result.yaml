@@ -32,6 +32,10 @@ spec:
       annotations:
         checksum/secret: {{ include (print $.Template.BasePath "/db-secret.yaml") . | sha256sum }}
     spec:
+      # don't inject Docker-link style variables for every Service (e.g. the
+      # "db" Service would add DB_PORT=tcp://10.100.x.x:5432, which clashes
+      # with our own DB_PORT setting and crashed the worker)
+      enableServiceLinks: false
       # uid/gid 1000 is the built-in "node" user of the Node.js image
       {{- include "uga-vote.podSecurity" (dict "uid" 1000 "gid" 1000) | nindent 6 }}
       containers:
@@ -46,6 +50,8 @@ spec:
               value: {{ .Values.options.b | quote }}
             - name: DB_HOST
               value: db
+            - name: DB_PORT
+              value: "5432"
             - name: DB_NAME
               value: {{ .Values.db.name | quote }}
             - name: DB_USER

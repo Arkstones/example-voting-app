@@ -30,6 +30,14 @@ votes_in_queue() {
     kubectl exec -n "$NS" deploy/redis -- redis-cli llen votes 2>/dev/null | tr -d '[:space:]'
 }
 
+# the app must already be deployed (by the pipeline's deploy job)
+if ! helm status "$RELEASE" -n "$NS" >/dev/null 2>&1; then
+    echo "ERROR: Helm release '$RELEASE' is not installed in namespace '$NS'."
+    echo "Deploy it first: merge to main and let the pipeline's 'Deploy to EKS' job run"
+    echo "(check the Actions tab), then run this script again."
+    exit 1
+fi
+
 vote_url=$(kubectl get svc vote -n "$NS" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 result_url=$(kubectl get svc result -n "$NS" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
