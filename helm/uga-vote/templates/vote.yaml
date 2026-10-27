@@ -31,6 +31,10 @@ spec:
       labels:
         {{- include "uga-vote.labels" (dict "root" $ "component" "vote") | nindent 8 }}
     spec:
+      # don't inject Docker-link style variables for every Service (e.g. the
+      # "db" Service would add DB_PORT=tcp://10.100.x.x:5432, which clashes
+      # with our own DB_PORT setting and crashed the worker)
+      enableServiceLinks: false
       # uid/gid 10001 is the "app" user created in vote/Dockerfile
       {{- include "uga-vote.podSecurity" (dict "uid" 10001 "gid" 10001) | nindent 6 }}
       containers:
