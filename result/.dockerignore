@@ -6,6 +6,7 @@ node_modules/
 Dockerfile
 docker-compose.test.yml
 tests/
+test/
 npm-debug.log*
 *.log
 .env

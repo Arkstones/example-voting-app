@@ -23,10 +23,6 @@ var dbConfig = {
   database: process.env.DB_NAME || 'postgres'
 };
 
-if (!dbConfig.password) {
-  console.error('DB_PASSWORD is not set, the database login will fail');
-}
-
 io.on('connection', function (socket) {
 
   socket.emit('message', { text : 'Welcome!' });
@@ -36,26 +32,29 @@ io.on('connection', function (socket) {
   });
 });
 
-var pool = new Pool(dbConfig);
+// connect to Postgres (retrying until it is up) and start sending scores
+function connectToDb() {
+  var pool = new Pool(dbConfig);
 
-async.retry(
-  {times: 1000, interval: 1000},
-  function(callback) {
-    pool.connect(function(err, client, done) {
+  async.retry(
+    {times: 1000, interval: 1000},
+    function(callback) {
+      pool.connect(function(err, client, done) {
+        if (err) {
+          console.error("Waiting for db");
+        }
+        callback(err, client);
+      });
+    },
+    function(err, client) {
       if (err) {
-        console.error("Waiting for db");
+        return console.error("Giving up");
       }
-      callback(err, client);
-    });
-  },
-  function(err, client) {
-    if (err) {
-      return console.error("Giving up");
+      console.log("Connected to db");
+      getVotes(client);
     }
-    console.log("Connected to db");
-    getVotes(client);
-  }
-);
+  );
+}
 
 function getVotes(client) {
   client.query('SELECT vote, COUNT(id) AS count FROM votes GROUP BY vote', [], function(err, result) {
@@ -111,7 +110,16 @@ app.get('/healthz', function (req, res) {
   res.status(200).send('ok');
 });
 
-server.listen(port, function () {
-  var port = server.address().port;
-  console.log('App running on port ' + port);
-});
+// only connect and listen when started with "node server.js";
+// the tests load this file with require() and use the exports instead
+if (require.main === module) {
+  if (!dbConfig.password) {
+    console.error('DB_PASSWORD is not set, the database login will fail');
+  }
+  connectToDb();
+  server.listen(port, function () {
+    console.log('App running on port ' + server.address().port);
+  });
+}
+
+module.exports = { app, server, escapeHtml, collectVotesFromResult };
