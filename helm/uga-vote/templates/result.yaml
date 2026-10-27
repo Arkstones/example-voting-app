@@ -1,0 +1,74 @@
+# result: the live results page. Public through an AWS load balancer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: result
+  labels:
+    {{- include "uga-vote.labels" (dict "root" $ "component" "result") | nindent 4 }}
+spec:
+  type: {{ .Values.result.service.type }}
+  selector:
+    {{- include "uga-vote.selectorLabels" (dict "root" $ "component" "result") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.result.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: result
+  labels:
+    {{- include "uga-vote.labels" (dict "root" $ "component" "result") | nindent 4 }}
+spec:
+  replicas: {{ .Values.result.replicas }}
+  selector:
+    matchLabels:
+      {{- include "uga-vote.selectorLabels" (dict "root" $ "component" "result") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "uga-vote.labels" (dict "root" $ "component" "result") | nindent 8 }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/db-secret.yaml") . | sha256sum }}
+    spec:
+      # uid/gid 1000 is the built-in "node" user of the Node.js image
+      {{- include "uga-vote.podSecurity" (dict "uid" 1000 "gid" 1000) | nindent 6 }}
+      containers:
+        - name: result
+          image: {{ include "uga-vote.image" (dict "root" $ "component" "result") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- include "uga-vote.containerSecurity" (dict "readOnly" true) | nindent 10 }}
+          env:
+            - name: OPTION_A
+              value: {{ .Values.options.a | quote }}
+            - name: OPTION_B
+              value: {{ .Values.options.b | quote }}
+            - name: DB_HOST
+              value: db
+            - name: DB_NAME
+              value: {{ .Values.db.name | quote }}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: db-credentials, key: username }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: db-credentials, key: password }
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.result.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

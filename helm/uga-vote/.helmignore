@@ -1,0 +1,5 @@
+# files Helm leaves out of the packaged chart
+.DS_Store
+*.swp
+*~
+*.tmp

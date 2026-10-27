@@ -1,0 +1,10 @@
+apiVersion: v2
+name: uga-vote
+description: Kampala vs Entebbe voting app (vote, result, worker, Redis, PostgreSQL)
+type: application
+# version of the chart itself
+version: 1.0.0
+# version of the app; the real image version is image.tag (the commit SHA)
+appVersion: "1.0.0"
+maintainers:
+  - name: Robert Olwoch

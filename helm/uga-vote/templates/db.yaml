@@ -1,0 +1,86 @@
+# PostgreSQL: a StatefulSet so its disk (an EBS volume) stays attached to it
+# across restarts and upgrades. Only reachable inside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  labels:
+    {{- include "uga-vote.labels" (dict "root" $ "component" "db") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "uga-vote.selectorLabels" (dict "root" $ "component" "db") | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  labels:
+    {{- include "uga-vote.labels" (dict "root" $ "component" "db") | nindent 4 }}
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "uga-vote.selectorLabels" (dict "root" $ "component" "db") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "uga-vote.labels" (dict "root" $ "component" "db") | nindent 8 }}
+      annotations:
+        # restart the pod if the secret changes
+        checksum/secret: {{ include (print $.Template.BasePath "/db-secret.yaml") . | sha256sum }}
+    spec:
+      # uid/gid 70 is the "postgres" user in the Alpine postgres image
+      {{- include "uga-vote.podSecurity" (dict "uid" 70 "gid" 70) | nindent 6 }}
+      containers:
+        - name: postgres
+          image: {{ .Values.db.image }}
+          imagePullPolicy: IfNotPresent
+          {{- include "uga-vote.containerSecurity" (dict "readOnly" false) | nindent 10 }}
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: db-credentials, key: username }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: db-credentials, key: password }
+            - name: POSTGRES_DB
+              value: {{ .Values.db.name | quote }}
+            # a sub-folder, because a fresh EBS disk has a lost+found folder
+            # in its root and Postgres refuses to start in a non-empty folder
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -h 127.0.0.1"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -h 127.0.0.1"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.db.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.db.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.db.storage.size }}
