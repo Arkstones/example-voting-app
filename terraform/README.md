@@ -19,8 +19,9 @@ Creates the Kubernetes cluster the voting app runs on.
 | `variables.tf` | Region, cluster name, Kubernetes version, node size and count |
 | `main.tf` | Default VPC lookup, the EKS module, IAM role for the EBS disk driver |
 | `outputs.tf` | Cluster name, endpoint, and the `kubectl` connect command |
-| `up.sh` | `terraform init` + `apply`, then connects `kubectl` and waits for nodes |
-| `down.sh` | Removes Kubernetes-made load balancers and disks, then `terraform destroy` |
+| `ci-user/main.tf` | The `github-deployer` IAM user for GitHub Actions, in its own state so it survives cluster destroy/recreate |
+| `up.sh` | Applies `ci-user`, then `terraform init` + `apply`, connects `kubectl`, waits for nodes, applies `../k8s/cluster-setup.yaml` (namespace + storage class) |
+| `down.sh` | Deletes the app namespaces (which removes their load balancers and disks), then `terraform destroy` |
 
 ## Usage
 
@@ -47,6 +48,7 @@ cd terraform && terraform apply -var="node_count=3"
 - **EBS disk driver with Pod Identity.** Only the driver's own service account gets permission to create disks, not every pod on the node.
 - **No IRSA / OIDC provider.** The free plan blocks `iam:CreateOpenIDConnectProvider` (my second apply failed with an explicit deny from a service control policy). EKS Pod Identity doesn't need an OIDC provider, so `enable_irsa = false`.
 - **`vpc-cni` before nodes.** Nodes can't become Ready until pod networking exists, so `before_compute = true` installs it first.
+- **Limited deploy user.** GitHub Actions deploys as `github-deployer`, which can only describe this cluster in AWS and edit resources in the `uga-vote` namespace in Kubernetes (`AmazonEKSEditPolicy` scoped to one namespace). Its access key is made in the AWS console and stored as a GitHub secret, never in Terraform state. The keyless GitHub OIDC login would be better, but it needs an IAM OIDC provider, which the free plan blocks.
 - **Local state.** `terraform.tfstate` stays on my machine and is ignored by Git, because it can contain sensitive values. Remote state in S3 is an optional stretch goal.
 
 ## Cost
