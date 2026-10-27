@@ -1,0 +1,19 @@
+# Overrides docker-compose.yml for the end-to-end test:
+# build the "final" (production) image stages and don't mount the source code,
+# so the test runs exactly what gets shipped.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+# (scripts/e2e-test.sh does this for you)
+
+services:
+  vote:
+    build:
+      target: final
+    volumes: !reset []
+
+  result:
+    build:
+      target: final
+    volumes: !reset []
+    ports: !override
+      - "8081:8080"
