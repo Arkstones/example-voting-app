@@ -1,0 +1,161 @@
+# CI pipeline for the voting app
+#
+#   test-vote ─┐
+#   test-result├─> e2e ─> images (vote, result, worker)
+#   build-worker┘          build -> Trivy scan -> push to ghcr.io (main only)
+#
+# Every image is tagged with the full commit SHA, so each running version
+# can be traced back to the exact commit it was built from.
+# Third-party actions are pinned to a commit SHA (the comment shows the version),
+# so a moved or hijacked tag can't change what runs here.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# least privilege by default; the images job asks for more below
+permissions:
+  contents: read
+
+# a newer push to the same branch cancels the older, still-running pipeline
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-vote:
+    name: Test vote (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vote
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: vote/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -v
+
+  test-result:
+    name: Test result (node --test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: result
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: result/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Check for vulnerable npm packages
+        run: npm audit --omit=dev --audit-level=high
+
+  build-worker:
+    name: Build worker (dotnet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Compile
+        run: dotnet build worker/Worker.csproj -c Release
+
+  e2e:
+    name: End-to-end test (compose)
+    needs: [test-vote, test-result, build-worker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run the whole app and cast a vote
+        run: ./scripts/e2e-test.sh
+
+  images:
+    name: Image ${{ matrix.service }}
+    needs: e2e
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: vote
+            target: final
+          - service: result
+            target: final
+          - service: worker
+            target: ""
+    env:
+      # ghcr.io/<owner>/uga-vote/<service>:<commit sha>
+      IMAGE: ghcr.io/arkstones/uga-vote/${{ matrix.service }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.service }}
+          target: ${{ matrix.target }}
+          tags: ${{ env.IMAGE }}
+          # load into the local Docker engine so Trivy can scan it before pushing
+          load: true
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: table
+          # fail on CRITICAL or HIGH vulnerabilities that have a fix available;
+          # unfixed ones are reported but can't be acted on yet
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Log in to ghcr.io
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker push "$IMAGE"
+          echo "Pushed \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"

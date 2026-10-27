@@ -27,6 +27,11 @@ CMD ["python", "app.py"]
 # final: what gets shipped
 FROM base AS final
 
+# pip (and the packages it bundles, like urllib3) is only needed to install
+# dependencies, never at runtime. Removing it takes its vulnerabilities out of
+# the image that gets shipped (Trivy flagged HIGH CVEs in pip's bundled copies).
+RUN python -m pip uninstall -y pip setuptools wheel
+
 COPY --chown=app:app . .
 
 USER app

@@ -28,6 +28,13 @@ CMD ["nodemon", "--inspect=0.0.0.0", "server.js"]
 
 # final: what gets shipped
 FROM base AS final
+
+# npm and corepack are only needed to install packages, never at runtime.
+# Removing them takes the vulnerable copies of undici and brace-expansion they
+# bundle out of the shipped image (Trivy flagged them as HIGH).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
 COPY --chown=node:node . .
 USER node
 
