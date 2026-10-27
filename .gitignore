@@ -12,3 +12,11 @@ node_modules/
 .venv/
 venv/
 __pycache__/
+
+# Terraform: provider downloads and state (state can contain secrets)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+# keep .terraform.lock.hcl in Git so everyone gets the same provider versions
