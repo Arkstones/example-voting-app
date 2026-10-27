@@ -1,6 +1,6 @@
 # base: Python runtime + dependencies, shared by the dev and final stages.
 # Pinned to Python 3.13 on Debian 13 (trixie) so builds are repeatable.
-FROM python:3.13-slim-trixie AS base
+FROM python:3.13-slim-trixie@sha256:b3575dcf816cdacc5292df77a6e3e59b8941631078373a045efa2ac1e9c5c3b2 AS base
 
 # curl is used by the container healthcheck
 RUN apt-get update && \

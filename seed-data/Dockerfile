@@ -1,5 +1,5 @@
 # helper image that fills the database with test votes (only runs with --profile seed)
-FROM python:3.13-slim-trixie
+FROM python:3.13-slim-trixie@sha256:b3575dcf816cdacc5292df77a6e3e59b8941631078373a045efa2ac1e9c5c3b2
 
 # add apache bench (ab) tool
 RUN apt-get update \

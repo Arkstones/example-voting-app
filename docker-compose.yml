@@ -74,7 +74,7 @@ services:
       - back-tier
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:7.4-alpine@sha256:6ba19c50b56777f5c11c58eff8ddb69d0d5f27ba131cffb63f180ccfd43c66af
     volumes:
       - "./healthchecks:/healthchecks"
     healthcheck:
@@ -84,7 +84,7 @@ services:
       - back-tier
 
   db:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
