@@ -1,0 +1,4 @@
+# only needed to run the tests, not installed in the Docker image
+-r requirements.txt
+pytest==9.1.1
+fakeredis==2.40.0
