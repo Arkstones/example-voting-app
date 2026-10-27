@@ -4,3 +4,11 @@ bin/
 obj/
 .vs/
 node_modules/
+
+# local secrets (copy .env.example to .env)
+.env
+
+# local Python virtualenvs
+.venv/
+venv/
+__pycache__/
