@@ -35,6 +35,11 @@ data "aws_subnets" "default" {
   }
 }
 
+# the deploy user from terraform/ci-user (must be applied first, up.sh does it)
+data "aws_iam_user" "github_deployer" {
+  user_name = "github-deployer"
+}
+
 # ---------------------------------------------------------------------------
 # EKS cluster, built with the community module
 # https://registry.terraform.io/modules/terraform-aws-modules/eks/aws
@@ -69,6 +74,24 @@ module "eks" {
   # iam:CreateOpenIDConnectProvider, and Pod Identity (used below for the
   # EBS CSI driver) is the newer way to give pods AWS permissions anyway.
   enable_irsa = false
+
+  # the GitHub Actions deploy user (created once in terraform/ci-user) may
+  # only edit resources inside the app's namespace, it is not a cluster admin
+  access_entries = {
+    github_deployer = {
+      principal_arn = data.aws_iam_user.github_deployer.arn
+
+      policy_associations = {
+        edit_app_namespace = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
+          access_scope = {
+            type       = "namespace"
+            namespaces = [var.app_namespace]
+          }
+        }
+      }
+    }
+  }
 
   # EKS add-ons, installed and kept up to date by AWS
   addons = {

@@ -1,0 +1,12 @@
+{{ .Values.options.a }} vs {{ .Values.options.b }} is deployed as release "{{ .Release.Name }}" (revision {{ .Release.Revision }})
+in namespace "{{ .Release.Namespace }}", images tagged {{ .Values.image.tag }}.
+
+AWS needs 1-2 minutes to create the load balancers. Then get the public URLs:
+
+  kubectl get svc vote result -n {{ .Release.Namespace }} \
+    -o custom-columns=NAME:.metadata.name,URL:.status.loadBalancer.ingress[0].hostname
+
+Release history and rollback:
+
+  helm history {{ .Release.Name }} -n {{ .Release.Namespace }}
+  helm rollback {{ .Release.Name }} <revision> -n {{ .Release.Namespace }}

@@ -2,8 +2,8 @@
 # terraform/up.sh - create (or update) the EKS cluster and connect kubectl to it.
 #
 # Usage: ./terraform/up.sh
-# Takes about 15 minutes the first time. Costs about $5/day while the cluster exists,
-# so run ./terraform/down.sh when you are done.
+# Takes about 15 minutes the first time. Costs about $6-7/day while the cluster
+# exists, so run ./terraform/down.sh when you are done.
 
 set -euo pipefail
 
@@ -15,6 +15,12 @@ done
 
 echo "== AWS identity =="
 aws sts get-caller-identity --query Arn --output text
+
+echo
+echo "== deploy user for GitHub Actions (terraform/ci-user) =="
+# long-lived and free, never destroyed by down.sh; usually "No changes"
+terraform -chdir=ci-user init -input=false >/dev/null
+terraform -chdir=ci-user apply -input=false -auto-approve
 
 echo
 echo "== terraform init =="
@@ -35,6 +41,10 @@ echo "== nodes =="
 # nodes can take a minute to report Ready after the node group is created
 kubectl wait --for=condition=Ready nodes --all --timeout=300s
 kubectl get nodes -o wide
+
+echo
+echo "== namespace and storage class =="
+kubectl apply -f ../k8s/cluster-setup.yaml
 
 echo
 echo "Cluster $name is up in $region."

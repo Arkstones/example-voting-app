@@ -1,8 +1,9 @@
-# CI pipeline for the voting app
+# CI/CD pipeline for the voting app
 #
-#   test-vote ─┐
-#   test-result├─> e2e ─> images (vote, result, worker)
-#   build-worker┘          build -> Trivy scan -> push to ghcr.io (main only)
+#   test-vote ──┐
+#   test-result ├─> e2e ─┐
+#   build-worker┘        ├─> images (vote, result, worker) ─> deploy (main only)
+#   lint-chart ──────────┘   build -> Trivy -> push           helm upgrade on EKS
 #
 # Every image is tagged with the full commit SHA, so each running version
 # can be traced back to the exact commit it was built from.
@@ -22,10 +23,11 @@ on:
 permissions:
   contents: read
 
-# a newer push to the same branch cancels the older, still-running pipeline
+# one pipeline per branch at a time. On pull requests a newer push cancels
+# the older run; on main runs wait instead, so a deploy is never cut off halfway
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test-vote:
@@ -86,6 +88,23 @@ jobs:
       - name: Compile
         run: dotnet build worker/Worker.csproj -c Release
 
+  lint-chart:
+    name: Lint Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.1
+
+      # dummy values: the real tag and password only exist at deploy time
+      - name: helm lint
+        run: helm lint --strict helm/uga-vote --set image.tag=ci --set db.password=ci
+
+      - name: helm template (render every manifest)
+        run: helm template uga-vote helm/uga-vote --set image.tag=ci --set db.password=ci > /dev/null
+
   e2e:
     name: End-to-end test (compose)
     needs: [test-vote, test-result, build-worker]
@@ -98,7 +117,7 @@ jobs:
 
   images:
     name: Image ${{ matrix.service }}
-    needs: e2e
+    needs: [e2e, lint-chart]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -159,3 +178,80 @@ jobs:
         run: |
           docker push "$IMAGE"
           echo "Pushed \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy to EKS
+    needs: images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # shows each deployment (and the vote page link) on the repo's Deployments page
+    environment:
+      name: eks-uga-vote
+      url: ${{ steps.smoke.outputs.vote_url }}
+    env:
+      AWS_REGION: eu-north-1
+      CLUSTER_NAME: Uga-vote-cluster
+      NAMESPACE: uga-vote
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # the limited github-deployer user from terraform/ci-user; its key is a
+      # repository secret, never in the code
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # the cluster is destroyed when not in use to save money; then there is
+      # nothing to deploy to, which is not a pipeline failure
+      - name: Is the cluster running?
+        id: cluster
+        run: |
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>&1; then
+            echo "up=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "up=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$CLUSTER_NAME is not running, deploy skipped. Run ./terraform/up.sh, then re-run this job."
+          fi
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        if: steps.cluster.outputs.up == 'true'
+        with:
+          version: v4.3.1
+
+      - name: Connect kubectl
+        if: steps.cluster.outputs.up == 'true'
+        run: aws eks update-kubeconfig --name "$CLUSTER_NAME"
+
+      - name: helm upgrade --install
+        if: steps.cluster.outputs.up == 'true'
+        env:
+          DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          helm upgrade --install uga-vote helm/uga-vote \
+            --namespace "$NAMESPACE" \
+            --set-string image.tag="$GITHUB_SHA" \
+            --set-string db.password="$DB_PASSWORD" \
+            --wait --timeout 10m
+          helm history uga-vote -n "$NAMESPACE" --max 5
+
+      - name: Smoke test the public vote page
+        id: smoke
+        if: steps.cluster.outputs.up == 'true'
+        run: |
+          host=$(kubectl get svc vote -n "$NAMESPACE" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          url="http://$host"
+          echo "vote_url=$url" >> "$GITHUB_OUTPUT"
+          # a brand-new load balancer's DNS name can take a few minutes to work
+          for i in $(seq 1 30); do
+            if curl -fs --max-time 5 "$url/" | grep -q "Kampala"; then
+              echo "Vote page is live: $url"
+              echo "Deployed \`$GITHUB_SHA\` - vote page: $url" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "waiting for $url ($i/30)"
+            sleep 10
+          done
+          echo "::error::Vote page did not answer at $url"
+          exit 1

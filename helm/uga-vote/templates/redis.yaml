@@ -1,0 +1,63 @@
+# Redis: the queue between vote and worker. Only reachable inside the cluster.
+# Data is not kept on disk: queued votes are handled by the worker within
+# a second, so a restart loses at most the votes cast in that moment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    {{- include "uga-vote.labels" (dict "root" $ "component" "redis") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "uga-vote.selectorLabels" (dict "root" $ "component" "redis") | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    {{- include "uga-vote.labels" (dict "root" $ "component" "redis") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "uga-vote.selectorLabels" (dict "root" $ "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "uga-vote.labels" (dict "root" $ "component" "redis") | nindent 8 }}
+    spec:
+      # uid 999 / gid 1000 is the "redis" user in the Alpine redis image
+      {{- include "uga-vote.podSecurity" (dict "uid" 999 "gid" 1000) | nindent 6 }}
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          imagePullPolicy: IfNotPresent
+          # no snapshots to disk, see the comment at the top
+          args: ["redis-server", "--save", "", "--appendonly", "no"]
+          {{- include "uga-vote.containerSecurity" (dict "readOnly" true) | nindent 10 }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

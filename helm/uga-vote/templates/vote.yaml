@@ -1,0 +1,66 @@
+# vote: the page where people vote. Public through an AWS load balancer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vote
+  labels:
+    {{- include "uga-vote.labels" (dict "root" $ "component" "vote") | nindent 4 }}
+spec:
+  type: {{ .Values.vote.service.type }}
+  selector:
+    {{- include "uga-vote.selectorLabels" (dict "root" $ "component" "vote") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.vote.service.port }}
+      # the container listens on 8080 because it runs as a non-root user
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vote
+  labels:
+    {{- include "uga-vote.labels" (dict "root" $ "component" "vote") | nindent 4 }}
+spec:
+  replicas: {{ .Values.vote.replicas }}
+  selector:
+    matchLabels:
+      {{- include "uga-vote.selectorLabels" (dict "root" $ "component" "vote") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "uga-vote.labels" (dict "root" $ "component" "vote") | nindent 8 }}
+    spec:
+      # uid/gid 10001 is the "app" user created in vote/Dockerfile
+      {{- include "uga-vote.podSecurity" (dict "uid" 10001 "gid" 10001) | nindent 6 }}
+      containers:
+        - name: vote
+          image: {{ include "uga-vote.image" (dict "root" $ "component" "vote") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- include "uga-vote.containerSecurity" (dict "readOnly" true) | nindent 10 }}
+          env:
+            - name: OPTION_A
+              value: {{ .Values.options.a | quote }}
+            - name: OPTION_B
+              value: {{ .Values.options.b | quote }}
+            - name: REDIS_HOST
+              value: redis
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.vote.resources | nindent 12 }}
+          volumeMounts:
+            # the root filesystem is read-only; gunicorn needs a writable /tmp
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
