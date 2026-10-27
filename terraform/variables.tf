@@ -17,9 +17,9 @@ variable "kubernetes_version" {
 }
 
 variable "node_instance_type" {
-  description = "EC2 instance type for the worker nodes (t3.medium = 2 vCPU, 4 GiB)"
+  description = "EC2 instance type for the worker nodes (c7i-flex.large = 2 vCPU, 4 GiB, allowed on the AWS free plan)"
   type        = string
-  default     = "t3.medium"
+  default     = "c7i-flex.large"
 }
 
 variable "node_count" {

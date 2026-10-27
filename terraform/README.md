@@ -7,7 +7,7 @@ Creates the Kubernetes cluster the voting app runs on.
 | Cloud / region | AWS `eu-north-1` (Stockholm) |
 | Network | The account's **default VPC** and its default subnets (no new VPC, no NAT gateway) |
 | Cluster | EKS, Kubernetes 1.36, public API endpoint, standard (not extended) support |
-| Nodes | 1 managed node group, 2 × `t3.medium` (Amazon Linux 2023) |
+| Nodes | 1 managed node group, 2 × `c7i-flex.large` (Amazon Linux 2023) |
 | Add-ons | vpc-cni, kube-proxy, coredns, eks-pod-identity-agent, aws-ebs-csi-driver |
 | Module | [`terraform-aws-modules/eks/aws`](https://registry.terraform.io/modules/terraform-aws-modules/eks/aws) v21 |
 
@@ -40,6 +40,7 @@ cd terraform && terraform apply -var="node_count=3"
 
 ## Design choices
 
+- **`c7i-flex.large` nodes.** The AWS free plan only allows free-tier-eligible instance types; my first try with `t3.medium` failed with "instance type is not eligible for Free Tier". `c7i-flex.large` is the eligible type with the same 2 vCPU / 4 GiB. Staying on the free plan means the account can never be charged beyond its credits.
 - **Default VPC.** The brief asks for it, and its subnets are public, so the nodes reach the internet without a NAT gateway (which would cost about $32/month on its own).
 - **Public API endpoint.** I need to reach the cluster from my laptop and from GitHub Actions. Access still needs valid AWS credentials and an EKS access entry.
 - **Cluster creator is admin.** `enable_cluster_creator_admin_permissions` gives the IAM user that ran Terraform (`robert-devops`) admin rights in Kubernetes. Without it, `kubectl` returns "Unauthorized".
@@ -49,7 +50,7 @@ cd terraform && terraform apply -var="node_count=3"
 
 ## Cost
 
-About **$5/day** while the cluster exists ($0.10/hour for the EKS control plane, plus two `t3.medium` nodes). It's close to $0 after `down.sh`. A zero-spend budget alert in AWS Budgets emails me if anything is left running.
+About **$6–7/day** while the cluster exists ($0.10/hour for the EKS control plane, plus two `c7i-flex.large` nodes), paid from the AWS free-plan credits. It's close to $0 after `down.sh`. A zero-spend budget alert in AWS Budgets emails me if anything is left running.
 
 ## Destroy and recreate
 
