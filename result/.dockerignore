@@ -1,1 +1,12 @@
+# keep the build context small: only app code goes into the image
 node_modules/
+.git
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.test.yml
+tests/
+npm-debug.log*
+*.log
+.env
+.DS_Store

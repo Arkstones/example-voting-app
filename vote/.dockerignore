@@ -1,0 +1,15 @@
+# keep the build context small: only app code goes into the image
+.git
+.gitignore
+.dockerignore
+Dockerfile
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+tests/
+*.log
+.env
+.DS_Store

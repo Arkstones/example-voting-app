@@ -1,0 +1,12 @@
+# keep the build context small: build output and editor files stay out
+bin/
+obj/
+.vs/
+.vscode/
+.git
+.gitignore
+.dockerignore
+Dockerfile
+*.log
+.env
+.DS_Store
