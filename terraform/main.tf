@@ -65,6 +65,11 @@ module "eks" {
   # otherwise kubectl gets "Unauthorized" right after the cluster is created
   enable_cluster_creator_admin_permissions = true
 
+  # No IAM OIDC provider (IRSA): the AWS free plan blocks
+  # iam:CreateOpenIDConnectProvider, and Pod Identity (used below for the
+  # EBS CSI driver) is the newer way to give pods AWS permissions anyway.
+  enable_irsa = false
+
   # EKS add-ons, installed and kept up to date by AWS
   addons = {
     # networking: must exist before nodes join, or they never become Ready

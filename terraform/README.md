@@ -45,6 +45,7 @@ cd terraform && terraform apply -var="node_count=3"
 - **Public API endpoint.** I need to reach the cluster from my laptop and from GitHub Actions. Access still needs valid AWS credentials and an EKS access entry.
 - **Cluster creator is admin.** `enable_cluster_creator_admin_permissions` gives the IAM user that ran Terraform (`robert-devops`) admin rights in Kubernetes. Without it, `kubectl` returns "Unauthorized".
 - **EBS disk driver with Pod Identity.** Only the driver's own service account gets permission to create disks, not every pod on the node.
+- **No IRSA / OIDC provider.** The free plan blocks `iam:CreateOpenIDConnectProvider` (my second apply failed with an explicit deny from a service control policy). EKS Pod Identity doesn't need an OIDC provider, so `enable_irsa = false`.
 - **`vpc-cni` before nodes.** Nodes can't become Ready until pod networking exists, so `before_compute = true` installs it first.
 - **Local state.** `terraform.tfstate` stays on my machine and is ignored by Git, because it can contain sensitive values. Remote state in S3 is an optional stretch goal.
 
