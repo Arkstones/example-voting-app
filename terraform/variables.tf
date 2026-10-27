@@ -27,3 +27,9 @@ variable "node_count" {
   type        = number
   default     = 2
 }
+
+variable "app_namespace" {
+  description = "Kubernetes namespace the voting app is deployed into"
+  type        = string
+  default     = "uga-vote"
+}

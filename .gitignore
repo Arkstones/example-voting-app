@@ -19,4 +19,4 @@ __pycache__/
 *.tfstate.*
 *.tfplan
 crash.log
-# keep .terraform.lock.hcl in Git so everyone gets the same provider versions
+# keep .terraform.lock.hcl files in Git so everyone gets the same provider versions

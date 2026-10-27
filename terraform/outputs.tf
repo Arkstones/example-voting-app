@@ -27,3 +27,8 @@ output "kubeconfig_command" {
   description = "Run this to point kubectl at the cluster"
   value       = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}"
 }
+
+output "app_namespace" {
+  description = "Namespace the voting app is deployed into"
+  value       = var.app_namespace
+}

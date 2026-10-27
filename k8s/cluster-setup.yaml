@@ -1,0 +1,33 @@
+# One-time cluster setup, applied by terraform/up.sh right after the cluster
+# is created. These are cluster-wide objects, which the limited GitHub deploy
+# user is not allowed to create, so they are not part of the Helm chart.
+
+# The app's namespace, with Pod Security Admission set to "restricted":
+# Kubernetes rejects any pod that runs as root, can gain privileges or keeps
+# Linux capabilities. Every pod in the chart is written to pass this.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: uga-vote
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+---
+# Default storage class: encrypted gp3 EBS disks from the EBS CSI driver.
+# New EKS clusters have no default storage class, so without this the
+# Postgres disk claim would wait forever.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+# create the disk in the same zone as the node the pod lands on
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+allowVolumeExpansion: true
