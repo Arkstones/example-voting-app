@@ -33,11 +33,13 @@ kubectl get nodes      # 2 nodes, Ready
 ./terraform/down.sh    # delete everything, about 10 minutes
 ```
 
-Change a setting without editing files, for example 3 nodes for Capstone 2:
+For Capstone 2 (Robot Shop plus Prometheus, Grafana, Loki and Jaeger), use 3 nodes:
 
 ```bash
-cd terraform && terraform apply -var="node_count=3"
+NODE_COUNT=3 ./terraform/up.sh
 ```
+
+The EKS module only uses `node_count` when the node group is first created, and ignores later changes so an autoscaler could manage it. So `up.sh` also scales an existing node group to `NODE_COUNT` with the AWS CLI. A plain `terraform apply -var node_count=3` on a running cluster would silently do nothing.
 
 ## Design choices
 
